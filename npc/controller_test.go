@@ -43,7 +43,7 @@ func (i *mockIPSet) AddEntry(ipsetName ipset.Name, entry string, comment string)
 	return i.addEntry(ipsetName, entry, comment, true)
 }
 
-func (i *mockIPSet) AddEntryIfNotExist(ipsetName ipset.Name, entry string, comment string) error {
+func (i *mockIPSet) AddEntryIfNotExist(ipsetName ipset.Name, entry string, id string, comment string) error {
 	return i.addEntry(ipsetName, entry, comment, false)
 }
 
@@ -66,7 +66,7 @@ func (i *mockIPSet) DelEntry(ipsetName ipset.Name, entry string) error {
 	return i.delEntry(ipsetName, entry, true)
 }
 
-func (i *mockIPSet) DelEntryIfExists(ipsetName ipset.Name, entry string) error {
+func (i *mockIPSet) DelEntryIfExists(ipsetName ipset.Name, entry string, id string) error {
 	return i.delEntry(ipsetName, entry, false)
 }
 
@@ -85,7 +85,7 @@ func (i *mockIPSet) delEntry(ipsetName ipset.Name, entry string, checkIfExists b
 	return nil
 }
 
-func (i *mockIPSet) Exist(ipsetName ipset.Name, entry string) bool {
+func (i *mockIPSet) Exist(ipsetName ipset.Name, entry string, id string) bool {
 	_, found := i.sets[string(ipsetName)].subSets[entry]
 	return found
 }
@@ -238,7 +238,7 @@ func TestDefaultAllow(t *testing.T) {
 	controller.AddPod(podFoo)
 
 	// Should add the foo pod to default-allow
-	require.True(t, m.Exist(defaultAllowIPSetName, fooPodIP))
+	require.True(t, m.Exist(defaultAllowIPSetName, fooPodIP, ""))
 
 	podBar := &coreapi.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -252,7 +252,7 @@ func TestDefaultAllow(t *testing.T) {
 	controller.UpdatePod(podBarNoIP, podBar)
 
 	// Should add the bar pod to default-allow
-	require.True(t, m.Exist(defaultAllowIPSetName, barPodIP))
+	require.True(t, m.Exist(defaultAllowIPSetName, barPodIP, ""))
 
 	// Allow access from the bar pod to the foo pod
 	netpol := &networkingv1.NetworkPolicy{
@@ -274,37 +274,37 @@ func TestDefaultAllow(t *testing.T) {
 	controller.AddNetworkPolicy(netpol)
 
 	// Should remove the foo pod from default-allow as the netpol selects it
-	require.False(t, m.Exist(defaultAllowIPSetName, fooPodIP))
-	require.True(t, m.Exist(defaultAllowIPSetName, barPodIP))
+	require.False(t, m.Exist(defaultAllowIPSetName, fooPodIP, ""))
+	require.True(t, m.Exist(defaultAllowIPSetName, barPodIP, ""))
 
 	podBarWithNewIP := *podBar
 	podBarWithNewIP.Status.PodIP = barPodNewIP
 	controller.UpdatePod(podBar, &podBarWithNewIP)
 
 	// Should update IP addr of the bar pod in default-allow
-	require.False(t, m.Exist(defaultAllowIPSetName, barPodIP))
-	require.True(t, m.Exist(defaultAllowIPSetName, barPodNewIP))
+	require.False(t, m.Exist(defaultAllowIPSetName, barPodIP, ""))
+	require.True(t, m.Exist(defaultAllowIPSetName, barPodNewIP, ""))
 
 	controller.UpdatePod(&podBarWithNewIP, podBarNoIP)
 	// Should remove the bar pod from default-allow as it does not have any IP addr
-	require.False(t, m.Exist(defaultAllowIPSetName, barPodNewIP))
+	require.False(t, m.Exist(defaultAllowIPSetName, barPodNewIP, ""))
 
 	podFooWithNewLabel := *podFoo
 	podFooWithNewLabel.ObjectMeta.Labels = map[string]string{"run": "new-foo"}
 	controller.UpdatePod(podFoo, &podFooWithNewLabel)
 
 	// Should bring back the foo pod to default-allow as it does not match dst of any netpol
-	require.True(t, m.Exist(defaultAllowIPSetName, fooPodIP))
+	require.True(t, m.Exist(defaultAllowIPSetName, fooPodIP, ""))
 
 	controller.UpdatePod(&podFooWithNewLabel, podFoo)
 	// Should remove from default-allow as it matches the netpol after the update
-	require.False(t, m.Exist(defaultAllowIPSetName, fooPodIP))
+	require.False(t, m.Exist(defaultAllowIPSetName, fooPodIP, ""))
 
 	controller.DeleteNetworkPolicy(netpol)
 	// Should bring back the foo pod to default-allow as no netpol selects it
-	require.True(t, m.Exist(defaultAllowIPSetName, fooPodIP))
+	require.True(t, m.Exist(defaultAllowIPSetName, fooPodIP, ""))
 
 	controller.DeletePod(podFoo)
 	// Should remove foo pod from default-allow
-	require.False(t, m.Exist(defaultAllowIPSetName, fooPodIP))
+	require.False(t, m.Exist(defaultAllowIPSetName, fooPodIP, ""))
 }

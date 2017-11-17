@@ -20,10 +20,10 @@ const (
 type Interface interface {
 	Create(ipsetName Name, ipsetType Type) error
 	AddEntry(ipsetName Name, entry string, comment string) error
-	AddEntryIfNotExist(ipsetName Name, entry string, comment string) error
+	AddEntryIfNotExist(ipsetName Name, entry, id string, comment string) error
 	DelEntry(ipsetName Name, entry string) error
-	DelEntryIfExists(ipsetName Name, entry string) error
-	Exist(ipsetName Name, entry string) bool
+	DelEntryIfExists(ipsetName Name, entry, id string) error
+	Exist(ipsetName Name, entry, id string) bool
 	Flush(ipsetName Name) error
 	Destroy(ipsetName Name) error
 
@@ -66,8 +66,21 @@ func (i *ipset) Create(ipsetName Name, ipsetType Type) error {
 }
 
 func (i *ipset) AddEntry(ipsetName Name, entry string, comment string) error {
+	return i.addEntry(ipsetName, entry, "", comment)
+}
+
+// AddEntryIfNotExist does the same as AddEntry but bypasses the ref counting.
+// Should be used only with "default-allow" ipsets.
+func (i *ipset) AddEntryIfNotExist(ipsetName Name, entry, id string, comment string) error {
+	if i.count(ipsetName, id+entry) == 1 {
+		return nil
+	}
+	return i.addEntry(ipsetName, entry, id, comment)
+}
+
+func (i *ipset) addEntry(ipsetName Name, entry string, id string, comment string) error {
 	i.Logger.Printf("adding entry %s to %s", entry, ipsetName)
-	if i.inc(ipsetName, entry) > 1 { // already in the set
+	if i.inc(ipsetName, id+entry) > 1 { // already in the set
 		return nil
 	}
 	args := []string{"add", string(ipsetName), entry}
@@ -77,34 +90,29 @@ func (i *ipset) AddEntry(ipsetName Name, entry string, comment string) error {
 	return doExec(args...)
 }
 
-// AddEntryIfNotExist does the same as AddEntry but bypasses the ref counting.
-// Should be used only with "default-allow" ipsets.
-func (i *ipset) AddEntryIfNotExist(ipsetName Name, entry string, comment string) error {
-	if i.count(ipsetName, entry) == 1 {
-		return nil
-	}
-	return i.AddEntry(ipsetName, entry, comment)
-}
-
 func (i *ipset) DelEntry(ipsetName Name, entry string) error {
-	i.Logger.Printf("deleting entry %s from %s", entry, ipsetName)
-	if i.dec(ipsetName, entry) > 0 { // still needed
-		return nil
-	}
-	return doExec("del", string(ipsetName), entry)
+	return i.delEntry(ipsetName, entry, "")
 }
 
 // DelEntryIfExists does the same as DelEntry but bypasses the ref counting.
 // Should be used only with "default-allow" ipsets.
-func (i *ipset) DelEntryIfExists(ipsetName Name, entry string) error {
-	if i.count(ipsetName, entry) == 0 {
+func (i *ipset) DelEntryIfExists(ipsetName Name, entry, id string) error {
+	if i.count(ipsetName, id+entry) == 0 {
 		return nil
 	}
 	return i.DelEntry(ipsetName, entry)
 }
 
-func (i *ipset) Exist(ipsetName Name, entry string) bool {
-	return i.count(ipsetName, entry) > 0
+func (i *ipset) delEntry(ipsetName Name, entry, id string) error {
+	i.Logger.Printf("deleting entry %s from %s", entry, ipsetName)
+	if i.dec(ipsetName, id+entry) > 0 { // still needed
+		return nil
+	}
+	return doExec("del", string(ipsetName), entry)
+}
+
+func (i *ipset) Exist(ipsetName Name, entry, id string) bool {
+	return i.count(ipsetName, id+entry) > 0
 }
 
 func (i *ipset) Flush(ipsetName Name) error {
